@@ -1,0 +1,42 @@
+{
+  "name": "generator",
+  "version": "1.0.0",
+  "description": "Generates a static export from a live website",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "node test/index.js | faucet"
+  },
+  "bin": {
+    "generator": "app.js"
+  },
+  "keywords": [
+    "generator",
+    "web-crawler",
+    "static",
+    "export",
+    "website"
+  ],
+  "author": "deuxhuithuit",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^2.4.2",
+    "cheerio": "^1.0.0-rc.3",
+    "html-entities": "^1.2.1",
+    "update-notifier": "^3.0.1",
+    "yargs": "^14.2.0"
+  },
+  "devDependencies": {
+    "faucet": "0.0.1",
+    "tape": "^4.11.0",
+    "tape-catch": "^1.0.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DeuxHuitHuit/generator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DeuxHuitHuit/generator/issues"
+  },
+  "homepage": "https://github.com/DeuxHuitHuit/generator"
+}
