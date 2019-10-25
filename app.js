@@ -6,10 +6,6 @@ const yargs = require('yargs');
 const pkg = require('./package.json');
 const updateNotifier = require('update-notifier');
 
-const {
-	Worker, isMainThread
-} = require('worker_threads');
-
 const argv = yargs
 	.demandCommand(1, 'At least one argument must be provided: the starting url')
 	//.usage(require('./lib/banner') + '\nUsage: $0 [opts]')
@@ -36,42 +32,49 @@ const URL = require('url');
 const log = require('./lib/logger')(argv);
 const errors = [];
 const seenUrls = new Map();
-const httpRequests = argv._;
+const pendingUrls = new Map();
 const fetchData = require('./lib/http')(argv);
 const parse = require('./lib/parser')(argv);
+const RunQueue = require('run-queue');
 
-if (isMainThread) {
-	(async () => {
-		while (!!httpRequests.length) {
-			try {
-				const httpRequest = httpRequests.shift();
-				seenUrls.set(httpRequest, true);
-				const httpData = await fetchData(URL.parse(httpRequest));
-				seenUrls.set(httpData.url.href, httpData);
-				const parsed = parse(httpData);
-				parsed.links.forEach(link => {
-					if (!seenUrls.has(link) && !httpRequests.includes(link)) {
-						httpRequests.push(link);
-					}
-				});
-			} catch (ex) {
-				errors.push(ex);
-			} finally {
-				log(`[%] ${httpRequests.length} request remaining.`);
+const run = async (httpRequest, queue) => {
+	try {
+		pendingUrls.delete(httpRequest);
+		seenUrls.set(httpRequest, true);
+		const httpData = await fetchData(URL.parse(httpRequest));
+		seenUrls.set(httpData.url.href, httpData);
+		const parsed = parse(httpData);
+		parsed.links.forEach(link => {
+			if (!seenUrls.has(link) && !pendingUrls.has(link)) {
+				pendingUrls.set(link, true);
+				queue.add(1, run, [link, queue]);
 			}
-		}
-		log()
-		log('All Done.');
-		log(`Fetched ${seenUrls.size} urls.`);
-		if (errors.length) {
-			log(`${errors.length} were encountered:`);
-		}
-		errors.forEach(err => {
-			console.error(`[!] ${err}`);
 		});
-	})();
-	//updateNotifier({ pkg: pack }).notify();
-} else {
-	console.error('Must run app.js as the main thread.');
-	process.exit(-1);
+	} catch (ex) {
+		errors.push(ex);
+	} finally {
+		log(`[%] ${pendingUrls.size} request remaining.`);
+	}
 }
+
+(async () => {
+	const queue = new RunQueue({
+		maxConcurrency: require('os').cpus().length
+	});
+	argv._.forEach((link) => {
+		pendingUrls.set(link, true);
+		queue.add(1, run, [link, queue]);
+	});
+	await queue.run();
+	log()
+	log('All Done.');
+	log(`Fetched ${seenUrls.size} urls.`);
+	if (errors.length) {
+		log(`${errors.length} were encountered:`);
+	}
+	errors.forEach(err => {
+		console.error(`[!] ${err}`);
+	});
+})();
+//updateNotifier({ pkg: pack }).notify();
+
