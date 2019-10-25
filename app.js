@@ -32,92 +32,44 @@ const argv = yargs
 	.argv;
 
 require('./lib/dns-cache');
+const URL = require('url');
 const log = require('./lib/logger')(argv);
 const errors = [];
 const seenUrls = new Map();
-const throwError = (err) => { throw err; };
-const exit = (code) => {
-	if (code !== 0) {
-		log(`[!] Worker stopped in error with exit code ${code}`);
-	} else if (argv.verbose) {
-		log(`[*] Worker stopped properly with exit code ${code}`)
-	}
-};
-
-const createParserWorker = () => {
-	const worker = new Worker('./src/parser.js', {
-		workerData: {
-			argv
-		}
-	});
-	worker.send = (response) => {
-		log(`[${worker.threadId}] Parsing url ${response.url.href}`);
-		worker.postMessage(response);
-	};
-	worker.on('message', (msg) => {
-		if (!msg) {
-			throw new Error('Message cannot be empty');
-		}
-		log(`[${worker.threadId}] Parsed url ${msg.url.href}`);
-		if (msg.error) {
-			errors.push(msg.error);
-			log.err(`[!] ${msg.error}`);
-		}
-		const hasNewUrl = msg.links.reduce((memo, link) => {
-			return memo || !seenUrls.has(link);
-		}, false);
-		if (hasNewUrl) {
-			msg.links.forEach((link) => {
-				process.nextTick(() => httpWorker.send(link));
-			});
-		} else {
-			worker.terminate();
-		}
-	});
-	worker.on('error', throwError);
-	worker.on('exit', exit);
-	return worker;
-};
-
-const createHttpWorker = () => {
-	const worker = new Worker('./src/http.js', {
-		workerData: {
-			argv
-		}
-	});
-	worker.send = (url) => {
-		if (seenUrls.has(url)) {
-			log(`[?] Skipped already seen url ${url}`);
-			return;
-		}
-		seenUrls.set(url, true);
-		log(`[${worker.threadId}] Fetching url ${url}`);
-		worker.postMessage(url);
-	};
-	worker.on('message', (msg) => {
-		if (!msg) {
-			throw new Error('Message cannot be empty');
-		}
-		if (msg.error) {
-			errors.push(msg.error);
-			log.err(`[!] ${worker.threadId} ${msg.error}`);
-		}
-		if (msg.data && msg.url) {
-			log(`[${worker.threadId}] Fetched url ${msg.url.href}`);
-			seenUrls.set(msg.url, msg);
-			process.nextTick(() => parserWorker.send(msg));
-		}
-	});
-	worker.on('error', throwError);
-	worker.on('exit', exit);
-	return worker;
-};
-
-const parserWorker = createParserWorker();
-const httpWorker = createHttpWorker();
+const httpRequests = argv._;
+const fetchData = require('./lib/http')(argv);
+const parse = require('./lib/parser')(argv);
 
 if (isMainThread) {
-	argv._.forEach(arg => httpWorker.send(arg));
+	(async () => {
+		while (!!httpRequests.length) {
+			try {
+				const httpRequest = httpRequests.shift();
+				seenUrls.set(httpRequest, true);
+				const httpData = await fetchData(URL.parse(httpRequest));
+				seenUrls.set(httpData.url.href, httpData);
+				const parsed = parse(httpData);
+				parsed.links.forEach(link => {
+					if (!seenUrls.has(link) && !httpRequests.includes(link)) {
+						httpRequests.push(link);
+					}
+				});
+			} catch (ex) {
+				errors.push(ex);
+			} finally {
+				log(`[%] ${httpRequests.length} request remaining.`);
+			}
+		}
+		log()
+		log('All Done.');
+		log(`Fetched ${seenUrls.size} urls.`);
+		if (errors.length) {
+			log(`${errors.length} were encountered:`);
+		}
+		errors.forEach(err => {
+			console.error(`[!] ${err}`);
+		});
+	})();
 	//updateNotifier({ pkg: pack }).notify();
 } else {
 	console.error('Must run app.js as the main thread.');
