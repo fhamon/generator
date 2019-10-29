@@ -17,9 +17,9 @@ const argv = yargs
 	.alias('v', 'verbose')
 	.alias('v', 'vv')
 	.alias('v', 'vvv')
-	//.string('c')
-	//.describe('c', 'Feed a config file to the generator')
-	//.alias('c', 'config')
+	.string('c')
+	.describe('c', 'Feed a config file to the generator')
+	.alias('c', 'config')
 	.number('r')
 	.describe('r', 'The retry delay for failed requests, in ms')
 	.alias('r', 'retryDelay')
@@ -36,6 +36,16 @@ const pendingUrls = new Map();
 const fetchData = require('./lib/http')(argv);
 const parse = require('./lib/parser')(argv);
 const RunQueue = require('run-queue');
+
+try {
+	if (argv.config) {
+		const config = require(argv.config);
+		argv.config = config;
+		log(`[*] Loaded config file from ${argv.c}`);
+	}
+} catch (ex) {
+	console.error(`[!] Failed to load config file at ${argv.config}`);
+}
 
 const run = async (httpRequest, queue) => {
 	try {
