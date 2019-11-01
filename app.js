@@ -67,11 +67,31 @@ const writeFile = async (httpData, queue) => {
 	}
 };
 
+const mustIgnoreUrl = (url) => {
+	if (!url.pathname) {
+		return false;
+	}
+	if (!argv.config || !argv.config.ignores || !argv.config.ignores.length) {
+		return false;
+	}
+	return argv.config.ignores.reduce((memo, current) => {
+		if (url.pathname.startsWith(current)) {
+			return true;
+		}
+		return memo;
+	}, false);
+}
+
 const run = async (httpRequest, queue) => {
 	try {
 		pendingUrls.delete(httpRequest);
 		seenUrls.set(httpRequest, true);
-		const httpData = await fetchData(URL.parse(httpRequest));
+		const u = URL.parse(httpRequest);
+		if (mustIgnoreUrl(u)) {
+			log(`[!] ${u.href} was ignored.`);
+			return;
+		}
+		const httpData = await fetchData(u);
 		seenUrls.set(httpData.url.href, httpData);
 		const parsed = parse(httpData);
 		parsed.links.forEach(link => {

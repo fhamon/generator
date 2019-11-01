@@ -33,3 +33,15 @@ test('Outside', (t) => {
     t.ok(e, e.message);
     t.end();
 });
+
+test('Starless', (t) => {
+    const p = urlToPath('./test', {pathname: '/fr/*/*/**/test'});
+    t.equals(p, path.normalize('./test/fr/test'));
+    t.end();
+});
+
+test('Double slash', (t) => {
+    const p = urlToPath('./test', {pathname: '/fr//*//test'});
+    t.equals(p, path.normalize('./test/fr/test'));
+    t.end();
+});
