@@ -24,6 +24,9 @@ const argv = yargs
 	.describe('r', 'The retry delay for failed requests, in ms')
 	.alias('r', 'retryDelay')
 	.default('r', 200)
+	.string('w')
+	.describe('w', 'Write the html output to the specified directory')
+	.alias('w', 'write')
 	.number('p')
 	.describe('p', 'Number of concurent tasks')
 	.alias('p', 'parallel')
@@ -39,6 +42,7 @@ const seenUrls = new Map();
 const pendingUrls = new Map();
 const fetchData = require('./lib/http')(argv);
 const parse = require('./lib/parser')(argv);
+const write = require('./lib/write')(argv);
 const RunQueue = require('run-queue');
 
 try {
@@ -50,6 +54,18 @@ try {
 } catch (ex) {
 	console.error(`[!] Failed to load config file at ${argv.config}`);
 }
+
+if (argv.write) {
+	log(`[*] Output will be saved in ${argv.w}`);
+}
+
+const writeFile = async (httpData, queue) => {
+	try {
+		await write(httpData);
+	} catch (ex) {
+		errors.push(ex);
+	}
+};
 
 const run = async (httpRequest, queue) => {
 	try {
@@ -64,6 +80,9 @@ const run = async (httpRequest, queue) => {
 				queue.add(1, run, [link, queue]);
 			}
 		});
+		if (argv.write) {
+			queue.add(0, writeFile, [httpData, queue]);
+		}
 	} catch (ex) {
 		errors.push(ex);
 	} finally {
