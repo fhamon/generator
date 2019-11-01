@@ -24,6 +24,10 @@ const argv = yargs
 	.describe('r', 'The retry delay for failed requests, in ms')
 	.alias('r', 'retryDelay')
 	.default('r', 200)
+	.number('p')
+	.describe('p', 'Number of concurent tasks')
+	.alias('p', 'parallel')
+	.default('p', require('os').cpus().length)
 	.version(pkg.version)
 	.argv;
 
@@ -69,7 +73,7 @@ const run = async (httpRequest, queue) => {
 
 (async () => {
 	const queue = new RunQueue({
-		maxConcurrency: require('os').cpus().length
+		maxConcurrency: argv.p || 1
 	});
 	argv._.forEach((link) => {
 		pendingUrls.set(link, true);
