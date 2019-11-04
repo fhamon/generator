@@ -58,6 +58,7 @@ test('Diff domain', (t) => {
 	const a = url.parse('https://example.org');
 	const b = url.parse('https://example.com');
 	t.ok(!hostIsValid(a, b));
+	t.ok(!hostIsValid(b, a));
 	t.end();
 });
 
@@ -65,5 +66,14 @@ test('Many chars', (t) => {
 	const a = url.parse('https://example.org');
 	const b = url.parse('https://example org');
 	t.ok(!hostIsValid(a, b));
+	t.ok(!hostIsValid(b, a));
+	t.end();
+});
+
+test('Domain relative', (t) => {
+	const a = url.parse('https://example.org');
+	const b = url.parse('/example/');
+	t.ok(hostIsValid(a, b));
+	t.ok(hostIsValid(b, a));
 	t.end();
 });
