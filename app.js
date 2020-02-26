@@ -35,6 +35,7 @@ const argv = yargs
 	.argv;
 
 require('./lib/dns-cache');
+const plugins = require('./lib/plugins');
 const URL = require('url');
 const log = require('./lib/logger')(argv);
 const errors = [];
@@ -55,13 +56,29 @@ try {
 	console.error(`[!] Failed to load config file at ${argv.config}`);
 }
 
+global.argv = argv;
+
 if (argv.write) {
 	log(`[*] Output will be saved in ${argv.w}`);
 }
 
 const writeFile = async (httpData, queue) => {
 	try {
+		const preWriteNotify = await plugins.notify('write.pre', {
+			httpData: httpData,
+			queue: queue
+		});
+
+		if (!!preWriteNotify) {
+			httpData = preWriteNotify;
+		}
+
 		await write(httpData);
+
+		await plugins.notify('write.post', {
+			httpData: httpData,
+			queue: queue
+		});
 	} catch (ex) {
 		errors.push(ex);
 	}
@@ -80,7 +97,7 @@ const mustIgnoreUrl = (url) => {
 		}
 		return memo;
 	}, false);
-}
+};
 
 const run = async (httpRequest, queue) => {
 	try {
@@ -108,9 +125,15 @@ const run = async (httpRequest, queue) => {
 	} finally {
 		log(`[%] ${pendingUrls.size} request remaining.`);
 	}
-}
+};
 
 (async () => {
+	await plugins.init();
+
+	await plugins.notify('app.start', {
+		argv: argv
+	});
+
 	const queue = new RunQueue({
 		maxConcurrency: argv.p || 1
 	});
@@ -119,7 +142,7 @@ const run = async (httpRequest, queue) => {
 		queue.add(1, run, [link, queue]);
 	});
 	await queue.run();
-	log()
+	log();
 	log('All Done.');
 	log(`Fetched ${seenUrls.size} urls.`);
 	if (errors.length) {
@@ -128,6 +151,9 @@ const run = async (httpRequest, queue) => {
 	errors.forEach(err => {
 		console.error(`[!] ${err}`);
 	});
+
+	await plugins.notify('app.end', {
+		errors: errors
+	});
 })();
 //updateNotifier({ pkg: pack }).notify();
-
